@@ -1,0 +1,290 @@
+---
+title: "padr"
+subtitle: "NHS R event"
+date: "2022-11-10"
+author: "Edwin Thoen"
+format: 
+  revealjs
+
+---
+
+# What is `padr`?
+
+## Motivation
+<br/>
+
+* Working with timestamped data too low level for analysis.
+
+* Having to write a lot of dirty code to aggregate and complete dates, while still keeping datetime variables.
+
+```{r}
+#| eval: false
+#| echo: true
+x <- data.frame(timestamp = as.POSIXct(c(
+  "2021-01-03 12:04:31", "2021-04-07 09:12:03")))
+x$month <- 
+  as.Date(paste0(substr(as.character(x$timestamp), 1, 8), "01"))
+```
+
+* Bridging discrepancy between "feeling" and "code".
+
+## `padr`
+<br/><br/><br/>
+A package that assists with quickly aggregating data to the desired datetime level, with complete records, for analysis.
+
+# the data
+
+## Emergency data Montgomery County
+
+![](montgomery.png){fig-align="center"}
+
+Curated by Mike Chirico, obtained from Kaggle.
+
+Account of all the emergency calls (673k) in the period 2015-2020
+
+# the *interval*
+
+## the *interval*
+
+<br/>
+
+The data's *interval* is the highest recurrence that fits all the cases.
+
+<br/>
+
+Does not have to fit all occurrences.
+
+## the *interval*
+
+<br/>
+
+The data's *interval* is the highest recurrence that fits all the cases.
+
+<br/>
+
+Does not have to fit all occurrences.
+
+<br/>
+
+```{r}
+#| echo: true
+as.Date(c("2022-10-01", "2022-10-03",  "2022-10-04")) |> 
+  padr::get_interval()
+```
+
+## the *interval*
+
+<br/>
+
+The data's *interval* is the highest recurrence that fits all the cases.
+
+<br/>
+
+Does not have to fit all occurrences.
+
+<br/>
+
+```{r}
+#| echo: true
+as.Date(c("2022-10-01", "2022-10-03",  "2022-10-05")) |> 
+  padr::get_interval()
+```
+
+## the *interval*
+
+<br/>
+
+The data's *interval* is the highest recurrence that fits all the cases.
+
+<br/>
+
+Does not have to fit all occurrences
+
+<br/>
+
+```{r}
+#| echo: true
+as.Date(c("2022-10-02", "2022-11-02",  "2022-01-02")) |> 
+  padr::get_interval()
+```
+
+# thicken
+
+## Function overview
+
+<br/>
+
+`thicken`
+
+<br/>
+
+*Objective*: assist at aggregating data that is too granular.
+
+<br/>
+
+*How*: adding a column of desired *interval*.
+
+<br/>
+
+Subsequently, use your favourite tool to aggregate.
+
+## `thicken`: going from this...
+
+<br/>
+
+```{r}
+library(dplyr)
+library(ggplot2)
+emergency <- readRDS("emergency.Rds")
+traffic <- emergency |> 
+  filter(title == "Traffic: VEHICLE ACCIDENT -") |> 
+  select(title, timeStamp, twp)
+traffic
+```
+
+## `thicken`: ... to this
+
+```{r}
+traffic |> 
+  padr::thicken("month", "month") |> 
+  count(month) |> 
+  ggplot(aes(month, n)) +
+  geom_line() +
+  theme_bw() +
+  labs(title = "Monthly car accidents")
+```
+
+## Applying `thicken`
+
+<br/>
+
+```{r, `code-line-numbers` = "4-5"}
+#| echo: true
+traffic <- emergency |> 
+  filter(title == "Traffic: VEHICLE ACCIDENT -") |> 
+  select(title, timeStamp, twp)
+traffic |> 
+  padr::thicken(interval = "month", colname = "month")
+```
+
+## Finishing with the tidyverse
+
+<br/>
+
+```{r}
+#| echo: true
+
+traffic |> 
+  padr::thicken("month", "month") |> 
+  count(month) |> 
+  ggplot(aes(month, n)) +
+  geom_line() +
+  theme_bw() +
+  labs(title = "Monthly car accidents")
+```
+
+# pad
+
+## Function overview
+
+<br/>
+
+`pad`
+
+<br/>
+
+*Objective*: make implicit missing observations explicit.
+
+<br/>
+
+*How*: adding a row for each missing observation on the *interval*.
+
+<br/>
+
+Subsequently, give the each inserted row an appropriate value.
+
+## `pad` going from this ...
+
+```{r}
+#| echo: false
+heat <- emergency |> 
+  filter(title == "EMS: HEAT EXHAUSTION") |> 
+  select(title, timeStamp, twp) |> 
+  padr::thicken("week", "week") |> 
+  count(week)
+ggplot(heat, aes(week, n)) +
+  geom_line() + 
+  theme_bw() +
+  labs(title = "Weekly cases of heat exhaustion")
+```
+
+## `pad` ... to this
+
+```{r}
+#| echo: false
+heat <- emergency |> 
+  filter(title == "EMS: HEAT EXHAUSTION") |> 
+  select(title, timeStamp, twp) |> 
+  padr::thicken("week", "week") |> 
+  count(week) |> 
+  padr::pad() |> 
+  padr::fill_by_value()
+ggplot(heat, aes(week, n)) +
+  geom_line() + 
+  theme_bw() +
+  labs(title = "Weekly cases of heat exhaustion")
+```
+
+## Applying `pad`
+
+<br/>
+
+```{r}
+#| echo: true
+heat <- emergency |> 
+  filter(title == "EMS: HEAT EXHAUSTION") |> 
+  select(title, timeStamp, twp) |> 
+  padr::thicken("week", "week") |> 
+  count(week)
+heat
+```
+
+## Applying `pad`
+
+<br/>
+
+```{r}
+#| echo: true
+heat_padded <- heat |> 
+  padr::pad()
+heat_padded
+```
+
+## Finishing with the tidyverse and padr
+
+<br/>
+
+```{r}
+#| echo: true
+heat_padded |> 
+  padr::fill_by_value() |> # default is 0
+  ggplot(aes(week, n)) +
+  geom_line() + 
+  theme_bw() +
+  labs(title = "Weekly cases of heat exhaustion")
+```
+## Thank you
+<br/>
+<br/>
+Want to learn more?
+<br/>
+
+* Webinar @ NHS R conference 
+* Friday 25th November, 3.00 – 4.00 pm
+
+## Thank you
+<br/><br/>
+
+* github.com/EdwinTh/padr
+* edwinthoen@gmail.com
+* @edwin_thoen
